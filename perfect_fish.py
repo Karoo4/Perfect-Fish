@@ -813,9 +813,12 @@ class KarooFish:
                     else:
                         # Colorful World / Empty
                         time.sleep(wait_step)
-                        # Re-equip with extra hold and post-wait
-                        keyboard.press('2'); time.sleep(hold_key + 0.1); keyboard.release('2')
-                        time.sleep(0.8) # Wait for equip animation
+                        
+                        # RE-EQUIP ROD (Reset Strategy: 1 -> 2)
+                        keyboard.press('1'); time.sleep(hold_key); keyboard.release('1')
+                        time.sleep(0.5)
+                        keyboard.press('2'); time.sleep(hold_key); keyboard.release('2')
+                        time.sleep(1.0)
                         return
             
             # Fruit Detected!
