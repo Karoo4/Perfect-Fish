@@ -18,6 +18,7 @@ import time
 import json
 import os
 import tempfile
+import gc # Optimize RAM
 from datetime import datetime
 import numpy as np
 
@@ -831,7 +832,7 @@ class KarooFish:
             keyboard.press('backspace'); time.sleep(hold_key); keyboard.release('backspace')
             
             # Wait for drop animation
-            time.sleep(1.5 if is_rdp else 1.0)
+            time.sleep(2.0 if is_rdp else 1.0)
             
             # RE-EQUIP ROD (Press 2)
             keyboard.press('2'); time.sleep(hold_key); keyboard.release('2')
@@ -846,7 +847,7 @@ class KarooFish:
             keyboard.press('backspace'); time.sleep(hold_key); keyboard.release('backspace')
             
             # Recovery Re-equip
-            time.sleep(1.5 if is_rdp else 1.0)
+            time.sleep(2.0 if is_rdp else 1.0)
             keyboard.press('2'); time.sleep(hold_key); keyboard.release('2')
         finally: 
             self.is_performing_action = False
@@ -883,8 +884,6 @@ class KarooFish:
              self.root.after(0, lambda: self.afk_total_label.config(text=str(current_total)))
         self.previous_error = 0
         time.sleep(2.5) 
-
-import gc # Optimize RAM
 
     # --- HYBRID ENGINE: DXCAM CAPTURE + MSS LOGIC + SMART WATCHDOG ---
     def run_fishing_loop(self):
