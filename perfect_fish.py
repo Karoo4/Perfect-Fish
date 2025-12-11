@@ -820,8 +820,10 @@ class KarooFish:
             time.sleep(0.3)
             keyboard.press('backspace'); time.sleep(0.1); keyboard.release('backspace')
             
+            # Wait for drop animation (ROBUST FIX)
+            time.sleep(1.0)
+            
             # RE-EQUIP ROD (Press 2)
-            time.sleep(0.5)
             keyboard.press('2'); time.sleep(0.1); keyboard.release('2')
             
             self.move_to(self.point_coords[4]); time.sleep(0.2)
@@ -831,7 +833,7 @@ class KarooFish:
             keyboard.press('backspace'); time.sleep(0.1); keyboard.release('backspace')
             
             # Recovery Re-equip
-            time.sleep(0.5)
+            time.sleep(1.0)
             keyboard.press('2'); time.sleep(0.1); keyboard.release('2')
         finally: 
             self.is_performing_action = False
