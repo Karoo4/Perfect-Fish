@@ -888,6 +888,7 @@ class KarooFish:
         self.cast()
         
         was_detecting = False
+        detection_streak = 0
         
         # Smart detection loop
         while self.fishing_active:
@@ -988,6 +989,8 @@ class KarooFish:
 
                 # === LOGIC ===
                 if not found_first:
+                    detection_streak = 0 # Reset streak
+                    
                     # BARS NOT FOUND
                     if was_detecting: # Minigame Finished (Success)
                         was_detecting = False
@@ -1032,27 +1035,34 @@ class KarooFish:
                 white_indices = np.where(white_mask)[0]
 
                 if len(white_indices) > 0 and len(dark_indices) > 0:
-                    was_detecting = True
+                    detection_streak += 1
                     
-                    white_center = np.mean(white_indices)
-                    dark_center = np.mean(dark_indices)
-                    
-                    raw_error = dark_center - white_center
-                    normalized_error = raw_error / oh 
-                    
-                    derivative = normalized_error - self.previous_error
-                    self.previous_error = normalized_error
-                    pd_output = (self.kp_var.get() * normalized_error) + (self.kd_var.get() * derivative)
-                    
-                    if pd_output > 0:
-                        if time_since_cast > 3.0: 
-                            if not self.is_clicking:
-                                win32api.mouse_event(win32con.MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0)
-                                self.is_clicking = True
-                    else:
-                        if self.is_clicking:
-                            win32api.mouse_event(win32con.MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
-                            self.is_clicking = False
+                    # REQUIRE 3 CONSECUTIVE FRAMES to confirm detection (prevents flicker)
+                    if detection_streak >= 3:
+                        was_detecting = True
+                        
+                        white_center = np.mean(white_indices)
+                        dark_center = np.mean(dark_indices)
+                        
+                        raw_error = dark_center - white_center
+                        normalized_error = raw_error / oh 
+                        
+                        derivative = normalized_error - self.previous_error
+                        self.previous_error = normalized_error
+                        pd_output = (self.kp_var.get() * normalized_error) + (self.kd_var.get() * derivative)
+                        
+                        if pd_output > 0:
+                            if time_since_cast > 3.0: 
+                                if not self.is_clicking:
+                                    win32api.mouse_event(win32con.MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0)
+                                    self.is_clicking = True
+                        else:
+                            if self.is_clicking:
+                                win32api.mouse_event(win32con.MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
+                                self.is_clicking = False
+                
+                # Small sleep to prevent CPU hogging and allow buffer clear
+                time.sleep(0.005)
             
             except Exception as e: 
                 print(f"Error in fishing loop: {e}")
