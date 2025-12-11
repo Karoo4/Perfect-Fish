@@ -795,6 +795,12 @@ class KarooFish:
                     is_white = (r > 210 and g > 210 and b > 210)
                     is_black = (r < 30 and g < 30 and b < 30)
                     if not (is_white or is_black): 
+                        # Fruit Found - Continue to store
+                        pass
+                    else:
+                        # No Fruit - Re-equip rod and return
+                        time.sleep(0.3)
+                        keyboard.press('2'); time.sleep(0.1); keyboard.release('2')
                         return
             
             # Fruit Detected!
@@ -813,11 +819,20 @@ class KarooFish:
             
             time.sleep(0.3)
             keyboard.press('backspace'); time.sleep(0.1); keyboard.release('backspace')
+            
+            # RE-EQUIP ROD (Press 2)
+            time.sleep(0.5)
+            keyboard.press('2'); time.sleep(0.1); keyboard.release('2')
+            
             self.move_to(self.point_coords[4]); time.sleep(0.2)
             
         except Exception as e:
             print(f"Store Error: {e}")
             keyboard.press('backspace'); time.sleep(0.1); keyboard.release('backspace')
+            
+            # Recovery Re-equip
+            time.sleep(0.5)
+            keyboard.press('2'); time.sleep(0.1); keyboard.release('2')
         finally: 
             self.is_performing_action = False
 
