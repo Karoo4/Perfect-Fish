@@ -843,8 +843,9 @@ class KarooFish:
             # Wait for drop animation
             time.sleep(2.0 if is_rdp else 1.0)
             
-            # RE-EQUIP ROD (Press 2)
-            keyboard.press('2'); time.sleep(hold_key); keyboard.release('2')
+            # RE-EQUIP ROD (Robust)
+            keyboard.press('2'); time.sleep(hold_key + 0.15); keyboard.release('2')
+            time.sleep(1.0) # Ensure equip finishes
             
             self.move_to(self.point_coords[4]); time.sleep(0.2)
             
