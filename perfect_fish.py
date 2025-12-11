@@ -840,12 +840,14 @@ class KarooFish:
             # DROP / BACKSPACE
             keyboard.press('backspace'); time.sleep(hold_key); keyboard.release('backspace')
             
-            # Wait for drop animation
-            time.sleep(2.0 if is_rdp else 1.0)
+            # Wait for drop animation (Extended for RDP Safety)
+            time.sleep(3.0 if is_rdp else 1.0)
             
-            # RE-EQUIP ROD (Robust)
-            keyboard.press('2'); time.sleep(hold_key + 0.15); keyboard.release('2')
-            time.sleep(1.0) # Ensure equip finishes
+            # RE-EQUIP ROD (Reset Strategy: 1 -> 2)
+            keyboard.press('1'); time.sleep(hold_key); keyboard.release('1')
+            time.sleep(0.5)
+            keyboard.press('2'); time.sleep(hold_key); keyboard.release('2')
+            time.sleep(1.0) 
             
             self.move_to(self.point_coords[4]); time.sleep(0.2)
             
