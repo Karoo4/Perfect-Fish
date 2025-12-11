@@ -677,20 +677,35 @@ class KarooFish:
         if not pt: return
         try:
             x, y = int(pt[0]), int(pt[1])
-            win32api.SetCursorPos((x, y)); time.sleep(0.01)
-            win32api.mouse_event(win32con.MOUSEEVENTF_MOVE, 1, 1, 0, 0); time.sleep(0.01)
+            if self.use_rdp_mode_var.get():
+                # RDP Robust Move (Absolute Coords)
+                cw = win32api.GetSystemMetrics(0)
+                ch = win32api.GetSystemMetrics(1)
+                nx = int(x * 65535 / cw)
+                ny = int(y * 65535 / ch)
+                win32api.SetCursorPos((x, y))
+                time.sleep(0.05)
+                win32api.mouse_event(win32con.MOUSEEVENTF_ABSOLUTE | win32con.MOUSEEVENTF_MOVE, nx, ny, 0, 0)
+                time.sleep(0.05)
+            else:
+                # Standard Fast Move
+                win32api.SetCursorPos((x, y))
+                time.sleep(0.01)
+                win32api.mouse_event(win32con.MOUSEEVENTF_MOVE, 1, 1, 0, 0)
+                time.sleep(0.01)
         except Exception: pass
 
     def click(self, pt, debug_name="Target", hold_time=0.25):
         if not pt: return
         try:
-            x, y = int(pt[0]), int(pt[1])
-            win32api.SetCursorPos((x, y)); time.sleep(0.01)
-            win32api.mouse_event(win32con.MOUSEEVENTF_MOVE, 1, 1, 0, 0); time.sleep(0.02)
+            self.move_to(pt) # Use shared robust move logic
+            
             win32api.mouse_event(win32con.MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0)
             actual_hold = max(hold_time, self.rdp_click_hold)
             time.sleep(actual_hold) 
-            win32api.mouse_event(win32con.MOUSEEVENTF_LEFTUP, 0, 0, 0, 0); time.sleep(0.02)
+            win32api.mouse_event(win32con.MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
+            
+            time.sleep(0.05 if self.use_rdp_mode_var.get() else 0.02)
         except Exception as e: print(f"Click Error on {debug_name}: {e}")
 
     # --- ACTIONS (FISHING) ---
