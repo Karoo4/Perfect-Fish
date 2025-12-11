@@ -788,6 +788,11 @@ class KarooFish:
 
     def perform_store_fruit(self):
         try:
+            # RDP TIMING
+            is_rdp = self.use_rdp_mode_var.get()
+            hold_key = 0.2 if is_rdp else 0.1
+            wait_step = 1.0 if is_rdp else 0.3
+            
             p7 = self.point_coords.get(7)
             if p7:
                 with mss.mss() as sct:
@@ -799,8 +804,8 @@ class KarooFish:
                         pass
                     else:
                         # No Fruit - Re-equip rod and return
-                        time.sleep(0.3)
-                        keyboard.press('2'); time.sleep(0.1); keyboard.release('2')
+                        time.sleep(wait_step)
+                        keyboard.press('2'); time.sleep(hold_key); keyboard.release('2')
                         return
             
             # Fruit Detected!
@@ -808,33 +813,41 @@ class KarooFish:
             
             self.is_performing_action = True 
             
-            keyboard.press('2'); time.sleep(0.1); keyboard.release('2'); time.sleep(0.3)
-            keyboard.press('3'); time.sleep(0.1); keyboard.release('3')
-            time.sleep(self.clean_step_delay)
+            # UNEQUIP ROD (2)
+            keyboard.press('2'); time.sleep(hold_key); keyboard.release('2'); time.sleep(wait_step)
             
+            # EQUIP FRUIT (3)
+            keyboard.press('3'); time.sleep(hold_key); keyboard.release('3'); time.sleep(wait_step)
+            
+            # STORE CLICK
             if self.point_coords.get(5):
                 for i in range(3):
-                    self.click(self.point_coords[5], f"Store Click {i+1}", hold_time=0.2)
-                    time.sleep(0.4)
+                    self.click(self.point_coords[5], f"Store Click {i+1}", hold_time=0.2) # Click handles its own internal RDP hold
+                    time.sleep(0.5 if is_rdp else 0.4)
             
-            time.sleep(0.3)
-            keyboard.press('backspace'); time.sleep(0.1); keyboard.release('backspace')
+            time.sleep(wait_step)
             
-            # Wait for drop animation (ROBUST FIX)
-            time.sleep(1.0)
+            # DROP / BACKSPACE
+            keyboard.press('backspace'); time.sleep(hold_key); keyboard.release('backspace')
+            
+            # Wait for drop animation
+            time.sleep(1.5 if is_rdp else 1.0)
             
             # RE-EQUIP ROD (Press 2)
-            keyboard.press('2'); time.sleep(0.1); keyboard.release('2')
+            keyboard.press('2'); time.sleep(hold_key); keyboard.release('2')
             
             self.move_to(self.point_coords[4]); time.sleep(0.2)
             
         except Exception as e:
             print(f"Store Error: {e}")
-            keyboard.press('backspace'); time.sleep(0.1); keyboard.release('backspace')
+            is_rdp = self.use_rdp_mode_var.get()
+            hold_key = 0.2 if is_rdp else 0.1
+            
+            keyboard.press('backspace'); time.sleep(hold_key); keyboard.release('backspace')
             
             # Recovery Re-equip
-            time.sleep(1.0)
-            keyboard.press('2'); time.sleep(0.1); keyboard.release('2')
+            time.sleep(1.5 if is_rdp else 1.0)
+            keyboard.press('2'); time.sleep(hold_key); keyboard.release('2')
         finally: 
             self.is_performing_action = False
 
