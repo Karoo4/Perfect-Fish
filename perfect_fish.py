@@ -748,6 +748,7 @@ class KarooFish:
             self.click(self.point_coords[1], "Pt 1 (Confirm)", hold_time=hold)
             time.sleep(1.5 if is_rdp else 0.8) 
             
+            # Safety Loop (Reverted)
             sct = mss.mss()
             target_bgr = self.get_pixel_color_at_pt(sct, self.point_coords[3])
             
@@ -868,6 +869,7 @@ class KarooFish:
         self.perform_zoom_reset()
         
         if self.auto_purchase_var.get(): self.perform_auto_purchase_sequence()
+        if self.auto_bait_var.get(): self.perform_bait_select() # Initial Bait Select
         self.cast()
         
         was_detecting = False
