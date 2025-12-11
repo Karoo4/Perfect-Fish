@@ -195,6 +195,7 @@ class KarooFish:
             if "webhook_url" in data: self.webhook_url_var.set(data["webhook_url"])
             if "auto_zoom" in data: self.auto_zoom_var.set(data["auto_zoom"])
             if "use_rdp" in data: self.use_rdp_mode_var.set(data["use_rdp"])
+            if "overlay_area" in data: self.overlay_area = data["overlay_area"]
         except: pass
 
     def save_config(self):
@@ -205,7 +206,7 @@ class KarooFish:
             "afk_seconds": self.auto_afk_seconds_var.get(), "kp": self.kp_var.get(), "kd": self.kd_var.get(),
             "timeout": self.timeout_var.get(), "notify_enabled": self.notify_enabled_var.get(),
             "webhook_url": self.webhook_url_var.get(), "auto_zoom": self.auto_zoom_var.get(),
-            "use_rdp": self.use_rdp_mode_var.get()
+            "use_rdp": self.use_rdp_mode_var.get(), "overlay_area": self.overlay_area
         }
         try:
             with open(CONFIG_FILE, 'w') as f: json.dump(data, f, indent=4)
