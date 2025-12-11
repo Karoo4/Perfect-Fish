@@ -731,16 +731,22 @@ class KarooFish:
             amount = str(self.amount_var.get())
             self.send_webhook("🛒 Auto Purchase", f"Buying {amount} bait...", 0x00ffff)
 
+            # RDP TIMING ADJUSTMENTS
+            is_rdp = self.use_rdp_mode_var.get()
+            delay_e = 2.0 if is_rdp else self.purchase_delay_after_key
+            hold = 0.5 if is_rdp else 0.2
+            step = 1.5 if is_rdp else 0.6
+
             keyboard.press('e'); time.sleep(0.1); keyboard.release('e')
-            time.sleep(self.purchase_delay_after_key) 
-            self.click(self.point_coords[1], "Pt 1 (Yes)", hold_time=0.2); time.sleep(0.6) 
-            self.click(self.point_coords[2], "Pt 2 (Input)", hold_time=0.2); time.sleep(0.6)
+            time.sleep(delay_e) 
+            self.click(self.point_coords[1], "Pt 1 (Yes)", hold_time=hold); time.sleep(step) 
+            self.click(self.point_coords[2], "Pt 2 (Input)", hold_time=hold); time.sleep(step)
             
-            for char in amount: keyboard.write(char); time.sleep(0.05)
+            for char in amount: keyboard.write(char); time.sleep(0.1 if is_rdp else 0.05)
             time.sleep(0.5)
             
-            self.click(self.point_coords[1], "Pt 1 (Confirm)", hold_time=0.2)
-            time.sleep(0.8) 
+            self.click(self.point_coords[1], "Pt 1 (Confirm)", hold_time=hold)
+            time.sleep(1.5 if is_rdp else 0.8) 
             
             sct = mss.mss()
             target_bgr = self.get_pixel_color_at_pt(sct, self.point_coords[3])
@@ -773,9 +779,10 @@ class KarooFish:
                     is_white = (r > 210 and g > 210 and b > 210)
                     is_black = (r < 30 and g < 30 and b < 30)
                     if not (is_white or is_black): 
-                        # Fruit Detected!
-                        self.trigger_rare_catch_notification()
                         return
+            
+            # Fruit Detected!
+            self.trigger_rare_catch_notification()
             
             self.is_performing_action = True 
             
@@ -803,8 +810,14 @@ class KarooFish:
         p6 = self.point_coords.get(6)
         if not p6: return
         try:
-            self.is_performing_action = True 
-            self.click(p6, "Pt 6 (Bait Select)", hold_time=0.2); time.sleep(0.5)
+            self.is_performing_action = True
+            
+            # RDP TIMING
+            is_rdp = self.use_rdp_mode_var.get()
+            hold = 0.5 if is_rdp else 0.2
+            post_wait = 1.2 if is_rdp else 0.5
+            
+            self.click(p6, "Pt 6 (Bait Select)", hold_time=hold); time.sleep(post_wait)
             self.move_to(self.point_coords[4]); time.sleep(0.2)
         except: pass
         finally: self.is_performing_action = False
