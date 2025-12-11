@@ -771,7 +771,10 @@ class KarooFish:
                     b, g, r = self.get_pixel_color_at_pt(sct, p7)
                     is_white = (r > 210 and g > 210 and b > 210)
                     is_black = (r < 30 and g < 30 and b < 30)
-                    if not (is_white or is_black): return
+                    if not (is_white or is_black): 
+                        # Fruit Detected!
+                        self.trigger_rare_catch_notification()
+                        return
             
             self.is_performing_action = True 
             
