@@ -884,6 +884,8 @@ class KarooFish:
         self.previous_error = 0
         time.sleep(2.5) 
 
+import gc # Optimize RAM
+
     # --- HYBRID ENGINE: DXCAM CAPTURE + MSS LOGIC + SMART WATCHDOG ---
     def run_fishing_loop(self):
         print("Fishing Loop Started (Dual-Engine)")
@@ -920,11 +922,15 @@ class KarooFish:
         was_detecting = False
         detection_streak = 0
         
+        # OPTIMIZATION: Cache Metrics
+        curr_w = win32api.GetSystemMetrics(0)
+        curr_h = win32api.GetSystemMetrics(1)
+        frame_counter = 0
+        
         # Smart detection loop
         while self.fishing_active:
             try:
                 if self.is_performing_action: 
-                    # Don't sleep here, just skip frame to keep loop responsive
                     continue 
 
                 # 0. Watchdog / Stuck Protection
@@ -943,57 +949,23 @@ class KarooFish:
                     self.cast()
                     continue
 
-                # --- 1. GRAB IMAGE (DUAL ENGINE) ---
-                img_full = None
+                # 1. METRICS UPDATE (Low Frequency)
+                frame_counter += 1
+                if frame_counter >= 60: # Update every ~1s
+                    curr_w = win32api.GetSystemMetrics(0)
+                    curr_h = win32api.GetSystemMetrics(1)
+                    
+                    # ROTATION FIX
+                    if (curr_w > curr_h) != (self.base_width > self.base_height):
+                        self.base_width = curr_w
+                        self.base_height = curr_h
                 
-                if use_mss_engine:
-                    # MSS MODE (RDP Safe)
-                    try:
-                        curr_w = win32api.GetSystemMetrics(0)
-                        curr_h = win32api.GetSystemMetrics(1)
-                        monitor = {"top": 0, "left": 0, "width": curr_w, "height": curr_h}
-                        sct_img = sct_engine.grab(monitor)
-                        img_full = np.array(sct_img)[:, :, :3]
-                    except: time.sleep(0.01); continue
-                else:
-                    # DXCAM MODE (Performance)
-                    img_full = self.camera.get_latest_frame()
-                
-                if img_full is None: continue 
+                # MEMORY CLEANUP (Every ~10s)
+                if frame_counter >= 600:
+                    gc.collect()
+                    frame_counter = 0
 
-                # Auto-Failover / Recovery for DXCam
-                if not use_mss_engine and np.max(img_full) == 0:
-                    black_screen_strikes += 1
-                    if black_screen_strikes > 20:
-                        # Try to restart DXCam first before giving up
-                        print("!! DXCAM Black Screen !! Attempting Restart...")
-                        try: 
-                            self.camera.stop()
-                            del self.camera
-                            self.camera = dxcam.create(output_color="BGR")
-                            self.camera.start(target_fps=60, video_mode=True)
-                            black_screen_strikes = 0
-                            print("DXCam Restarted Successfully.")
-                            continue
-                        except:
-                            print("DXCam Restart Failed. Switching to MSS.")
-                            use_mss_engine = True
-                            self.use_rdp_mode_var.set(True)
-                            sct_engine = mss.mss()
-                            black_screen_strikes = 0
-                            continue
-                else:
-                    black_screen_strikes = 0
-
-                # 2. Scaling & Overlay Area
-                curr_w = win32api.GetSystemMetrics(0)
-                curr_h = win32api.GetSystemMetrics(1)
-                
-                # ROTATION FIX: If orientation flips, reset base metrics to prevent squashing
-                if (curr_w > curr_h) != (self.base_width > self.base_height):
-                    self.base_width = curr_w
-                    self.base_height = curr_h
-                
+                # 2. CALCULATE GEOMETRY (Pre-Capture)
                 scale_x = curr_w / self.base_width
                 scale_y = curr_h / self.base_height
                 
@@ -1002,16 +974,49 @@ class KarooFish:
                 ow = int(self.overlay_area['width'] * scale_x)
                 oh = int(self.overlay_area['height'] * scale_y)
                 
-                # ROBUST CLAMPING (Prevents crashes on vertical/narrow monitors)
+                # Robust Clamping
                 ox = max(0, min(ox, curr_w - 1))
                 oy = max(0, min(oy, curr_h - 1))
                 ow = max(1, min(ow, curr_w - ox))
                 oh = max(1, min(oh, curr_h - oy))
-                
-                # Slice
-                img = img_full[oy:oy+oh, ox:ox+ow]
 
-                # 3. Detection
+                # 3. CAPTURE
+                img = None
+                img_full = None # Ref reference
+                
+                if use_mss_engine:
+                    # MSS OPTIMIZED: Capture ONLY the overlay area
+                    try:
+                        monitor = {"top": oy, "left": ox, "width": ow, "height": oh}
+                        sct_img = sct_engine.grab(monitor)
+                        img = np.array(sct_img)[:, :, :3]
+                    except: time.sleep(0.01); continue
+                else:
+                    # DXCAM MODE
+                    img_full = self.camera.get_latest_frame()
+                    if img_full is None: continue 
+                    
+                    # Auto-Failover check
+                    if np.max(img_full) == 0:
+                        black_screen_strikes += 1
+                        if black_screen_strikes > 20:
+                            print("!! DXCAM Black Screen !! Attempting Restart...")
+                            try: 
+                                self.camera.stop(); del self.camera
+                                self.camera = dxcam.create(output_color="BGR")
+                                self.camera.start(target_fps=60, video_mode=True)
+                                black_screen_strikes = 0; continue
+                            except:
+                                print("DXCam Restart Failed. Switching to MSS.")
+                                use_mss_engine = True; self.use_rdp_mode_var.set(True)
+                                sct_engine = mss.mss(); black_screen_strikes = 0; continue
+                    else:
+                        black_screen_strikes = 0
+                    
+                    # Slice (Fast in NumPy)
+                    img = img_full[oy:oy+oh, ox:ox+ow]
+
+                # 4. Detection
                 col_mask = np.any(np.all(img == target_color, axis=-1), axis=0)
                 col_indices = np.where(col_mask)[0]
                 
@@ -1052,6 +1057,8 @@ class KarooFish:
                         print("Cast Timeout. Recasting.")
                         self.cast()
                     
+                    # Explicit cleanup
+                    del img, img_full
                     continue
 
                 # Bar Found (Minigame Active)
@@ -1067,7 +1074,7 @@ class KarooFish:
                 if len(white_indices) > 0 and len(dark_indices) > 0:
                     detection_streak += 1
                     
-                    # REQUIRE 3 CONSECUTIVE FRAMES to confirm detection (prevents flicker)
+                    # REQUIRE 3 CONSECUTIVE FRAMES to confirm detection
                     if detection_streak >= 3:
                         was_detecting = True
                         
@@ -1091,8 +1098,11 @@ class KarooFish:
                                 win32api.mouse_event(win32con.MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
                                 self.is_clicking = False
                 
-                # Small sleep to prevent CPU hogging and allow buffer clear
-                time.sleep(0.005)
+                # Small sleep to prevent CPU hogging
+                time.sleep(0.01)
+                
+                # Explicit cleanup
+                del img, img_full, col_mask, bar_img
             
             except Exception as e: 
                 print(f"Error in fishing loop: {e}")
