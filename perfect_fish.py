@@ -938,10 +938,14 @@ class KarooFish:
                     black_screen_strikes = 0
 
                 # 2. Scaling & Overlay Area
-                # Optimize: Get metrics only once per loop or cache them if performance is critical
-                # But win32api is fast enough.
                 curr_w = win32api.GetSystemMetrics(0)
                 curr_h = win32api.GetSystemMetrics(1)
+                
+                # ROTATION FIX: If orientation flips, reset base metrics to prevent squashing
+                if (curr_w > curr_h) != (self.base_width > self.base_height):
+                    self.base_width = curr_w
+                    self.base_height = curr_h
+                
                 scale_x = curr_w / self.base_width
                 scale_y = curr_h / self.base_height
                 
@@ -950,11 +954,14 @@ class KarooFish:
                 ow = int(self.overlay_area['width'] * scale_x)
                 oh = int(self.overlay_area['height'] * scale_y)
                 
-                # Safe slicing
-                if oy + oh > img_full.shape[0] or ox + ow > img_full.shape[1]: 
-                    img = img_full 
-                else: 
-                    img = img_full[oy:oy+oh, ox:ox+ow]
+                # ROBUST CLAMPING (Prevents crashes on vertical/narrow monitors)
+                ox = max(0, min(ox, curr_w - 1))
+                oy = max(0, min(oy, curr_h - 1))
+                ow = max(1, min(ow, curr_w - ox))
+                oh = max(1, min(oh, curr_h - oy))
+                
+                # Slice
+                img = img_full[oy:oy+oh, ox:ox+ow]
 
                 # 3. Detection
                 col_mask = np.any(np.all(img == target_color, axis=-1), axis=0)
