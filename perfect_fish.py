@@ -798,13 +798,20 @@ class KarooFish:
             if p7:
                 with mss.mss() as sct:
                     b, g, r = self.get_pixel_color_at_pt(sct, p7)
-                    is_white = (r > 210 and g > 210 and b > 210)
-                    is_black = (r < 30 and g < 30 and b < 30)
-                    if not (is_white or is_black): 
-                        # Fruit Found - Continue to store
+                    saturation = max(b, g, r) - min(b, g, r)
+                    brightness = (int(r) + int(g) + int(b)) / 3
+                    
+                    print(f"Slot 3: RGB({r},{g},{b}) | Sat:{saturation} | Bri:{brightness}")
+                    
+                    # LOGIC: Empty = Colorful World (Water/Sky). Fruit = B/W Icon.
+                    # We look for LOW Saturation (Greyscale) that is either very Dark or very Bright.
+                    is_icon = (saturation < 20) and ((brightness < 40) or (brightness > 210))
+                    
+                    if is_icon: 
+                        # B/W Icon Detected (Fruit)
                         pass
                     else:
-                        # No Fruit - Re-equip rod and return
+                        # Colorful World / Empty
                         time.sleep(wait_step)
                         keyboard.press('2'); time.sleep(hold_key); keyboard.release('2')
                         return
