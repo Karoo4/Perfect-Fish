@@ -813,7 +813,9 @@ class KarooFish:
                     else:
                         # Colorful World / Empty
                         time.sleep(wait_step)
-                        keyboard.press('2'); time.sleep(hold_key); keyboard.release('2')
+                        # Re-equip with extra hold and post-wait
+                        keyboard.press('2'); time.sleep(hold_key + 0.1); keyboard.release('2')
+                        time.sleep(0.8) # Wait for equip animation
                         return
             
             # Fruit Detected!
