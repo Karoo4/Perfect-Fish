@@ -862,6 +862,10 @@ class KarooFish:
         # Smart detection loop
         while self.fishing_active:
             try:
+                if self.is_performing_action: 
+                    # Don't sleep here, just skip frame to keep loop responsive
+                    continue 
+
                 # 0. Watchdog / Stuck Protection
                 current_time = time.time()
                 time_since_cast = current_time - self.last_cast_time
@@ -878,56 +882,51 @@ class KarooFish:
                     self.cast()
                     continue
 
-                if self.is_performing_action: time.sleep(0.1); continue
-
                 # --- 1. GRAB IMAGE (DUAL ENGINE) ---
                 img_full = None
                 
                 if use_mss_engine:
                     # MSS MODE (RDP Safe)
                     try:
-                        # Grab full screen or large area (MSS is fast enough on modern CPUs)
-                        # To optimize, we can grab just the overlay area + buffer
                         curr_w = win32api.GetSystemMetrics(0)
                         curr_h = win32api.GetSystemMetrics(1)
-                        scale_x = curr_w / self.base_width
-                        scale_y = curr_h / self.base_height
-                        
-                        # Grab slightly larger area around overlay to ensure we catch it
-                        monitor = {
-                            "top": 0, "left": 0, 
-                            "width": curr_w, "height": curr_h
-                        }
-                        
-                        # MSS returns BGRA, convert to BGR
+                        monitor = {"top": 0, "left": 0, "width": curr_w, "height": curr_h}
                         sct_img = sct_engine.grab(monitor)
                         img_full = np.array(sct_img)[:, :, :3]
-                        
-                    except Exception as e:
-                        print(f"MSS Error: {e}")
-                        time.sleep(0.1); continue
+                    except: time.sleep(0.01); continue
                 else:
                     # DXCAM MODE (Performance)
                     img_full = self.camera.get_latest_frame()
                 
                 if img_full is None: continue 
 
-                # Auto-Failover check for DXCam (Black Screen Detection)
+                # Auto-Failover / Recovery for DXCam
                 if not use_mss_engine and np.max(img_full) == 0:
                     black_screen_strikes += 1
                     if black_screen_strikes > 20:
-                        print("!! DXCAM FAILED (Black Screen) !! Switching to MSS Mode...")
-                        try: self.camera.stop(); del self.camera; self.camera = None
-                        except: pass
-                        use_mss_engine = True
-                        self.use_rdp_mode_var.set(True)
-                        sct_engine = mss.mss()
-                        black_screen_strikes = 0
-                        continue
+                        # Try to restart DXCam first before giving up
+                        print("!! DXCAM Black Screen !! Attempting Restart...")
+                        try: 
+                            self.camera.stop()
+                            del self.camera
+                            self.camera = dxcam.create(output_color="BGR")
+                            self.camera.start(target_fps=60, video_mode=True)
+                            black_screen_strikes = 0
+                            print("DXCam Restarted Successfully.")
+                            continue
+                        except:
+                            print("DXCam Restart Failed. Switching to MSS.")
+                            use_mss_engine = True
+                            self.use_rdp_mode_var.set(True)
+                            sct_engine = mss.mss()
+                            black_screen_strikes = 0
+                            continue
                 else:
                     black_screen_strikes = 0
 
                 # 2. Scaling & Overlay Area
+                # Optimize: Get metrics only once per loop or cache them if performance is critical
+                # But win32api is fast enough.
                 curr_w = win32api.GetSystemMetrics(0)
                 curr_h = win32api.GetSystemMetrics(1)
                 scale_x = curr_w / self.base_width
