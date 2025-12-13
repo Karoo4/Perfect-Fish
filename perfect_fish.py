@@ -469,7 +469,7 @@ class KarooFish(ctk.CTk):
                 msg = f"Latest Commit: {latest_hash}\nClick OK to open GitHub."
                 if messagebox.askokcancel("Update Check", msg):
                     import webbrowser
-                    webbrowser.open("https://github.com/arielldev/gpo-fishing")
+                    webbrowser.open("https://github.com/Karoo4/Perfect-Fish/releases")
         except: pass
 
     # --- INPUT/LOGIC COPY ---
