@@ -434,7 +434,7 @@ class KarooFish(ctk.CTk):
         ctk.CTkFrame(p, height=2, fg_color=THEME_ACCENT).pack(fill="x", padx=10, pady=2)
 
     def create_toggle(self, p, txt, var):
-        ctk.CTkSwitch(p, text=txt, variable=var, on_color=THEME_ACCENT, progress_color=THEME_ACCENT).pack(anchor="w", padx=10, pady=2)
+        ctk.CTkSwitch(p, text=txt, variable=var, switch_width=40, switch_height=20).pack(anchor="w", padx=10, pady=2)
 
     def create_input(self, p, lbl, var):
         f = ctk.CTkFrame(p, fg_color="transparent")
@@ -469,7 +469,7 @@ class KarooFish(ctk.CTk):
                 msg = f"Latest Commit: {latest_hash}\nClick OK to open GitHub."
                 if messagebox.askokcancel("Update Check", msg):
                     import webbrowser
-                    webbrowser.open("https://github.com/Karoo4/Perfect-Fish/releases")
+                    webbrowser.open("https://github.com/Karoo4/Perfect-Fish")
         except: pass
 
     # --- INPUT/LOGIC COPY ---
