@@ -19,10 +19,13 @@ jobs:
       with:
         python-version: '3.11'
 
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install pyinstaller pyinstaller-hooks-contrib keyboard pynput dxcam pywin32 mss Pillow requests numpy comtypes customtkinter easyocr torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+    - name: Install PyTorch (CPU)
+      # Install PyTorch FIRST from its specific index
+      run: pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+
+    - name: Install Dependencies
+      # Install standard packages from default PyPI
+      run: pip install pyinstaller pyinstaller-hooks-contrib keyboard pynput dxcam pywin32 mss Pillow requests numpy comtypes customtkinter easyocr
 
     - name: Build Executable
       run: |
