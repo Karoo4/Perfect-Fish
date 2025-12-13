@@ -22,11 +22,11 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install pyinstaller pyinstaller-hooks-contrib keyboard pynput dxcam pywin32 mss Pillow requests numpy comtypes
+        pip install pyinstaller pyinstaller-hooks-contrib keyboard pynput dxcam pywin32 mss Pillow requests numpy comtypes customtkinter easyocr torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
 
     - name: Build Executable
       run: |
-        pyinstaller --noconfirm --onefile --windowed --clean --name "KarooFish-Perfect" --hidden-import "pynput.keyboard._win32" --hidden-import "pynput.mouse._win32" --hidden-import "win32timezone" --collect-all "dxcam" --collect-all "mss" perfect_fish.py
+        pyinstaller --noconfirm --onefile --windowed --clean --name "KarooFish-Perfect" --hidden-import "pynput.keyboard._win32" --hidden-import "pynput.mouse._win32" --hidden-import "win32timezone" --collect-all "dxcam" --collect-all "mss" --collect-all "customtkinter" --collect-all "easyocr" perfect_fish.py
 
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
