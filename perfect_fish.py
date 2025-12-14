@@ -636,14 +636,14 @@ class KarooFish(ctk.CTk):
             self.reroll_status_lbl.configure(text="Reroll: OFF", text_color="red")
 
     def toggle_overlay(self):
-                    self.overlay_active = not self.overlay_active
-                    if self.overlay_active:
-                        self.overlay_status.configure(text="Overlay: ON", text_color=THEME_ACCENT)
-                        self.overlay_window = self.create_overlay_window(self.overlay_area, "Fishing Zone", THEME_ACCENT)
-                        self.ocr_overlay_window = self.create_overlay_window(self.ocr_overlay_area, "OCR Zone", THEME_ACCENT)
-                        
-                        if self.fishing_active: self.set_overlay_click_through(True)
-            else: self.set_overlay_click_through(False)
+        self.overlay_active = not self.overlay_active
+        if self.overlay_active:
+            self.overlay_status.configure(text="Overlay: ON", text_color=THEME_ACCENT)
+            self.overlay_window = self.create_overlay_window(self.overlay_area, "Fishing Zone", THEME_ACCENT)
+            self.ocr_overlay_window = self.create_overlay_window(self.ocr_overlay_area, "OCR Zone", THEME_ACCENT)
+            
+            if self.fishing_active: self.set_overlay_click_through(True)
+        else:
             self.overlay_status.configure(text="Overlay: OFF", text_color="gray")
             self.destroy_overlay()
 
