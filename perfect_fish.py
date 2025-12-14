@@ -203,7 +203,14 @@ class KarooFish(ctk.CTk):
         self.geometry("500x950")
         self.configure(fg_color=THEME_BG)
         self.attributes('-topmost', True)
-
+        
+        # --- CORE VARS INIT (Early) ---
+        self.rod_key_var = ctk.StringVar(value="1")
+        self.use_rdp_mode_var = ctk.BooleanVar(value=False)
+        self.auto_zoom_var = ctk.BooleanVar(value=True)
+        self.webhook_url_var = ctk.StringVar(value="")
+        self.notify_enabled_var = ctk.BooleanVar(value=True)
+        
         try: ctypes.windll.shcore.SetProcessDpiAwareness(1)
         except: pass
 
@@ -666,6 +673,7 @@ class KarooFish(ctk.CTk):
         # Bind events with specific reference to this window and area
         canvas.bind('<Button-1>', lambda e: self.on_overlay_down(e, win, area_ref))
         canvas.bind('<B1-Motion>', lambda e: self.on_overlay_drag(e, win, area_ref))
+        canvas.bind('<Motion>', lambda e: self.on_overlay_move(e, win, canvas))
         
         return win
 
@@ -681,6 +689,25 @@ class KarooFish(ctk.CTk):
             except: pass
 
     # --- OVERLAY EVENTS ---
+    def on_overlay_move(self, event, win, canvas):
+        x, y = event.x, event.y
+        w = win.winfo_width()
+        h = win.winfo_height()
+        edge = 15
+        
+        left = x < edge
+        right = x > w - edge
+        top = y < edge
+        bottom = y > h - edge
+        
+        if top and left: canvas.config(cursor='top_left_corner')
+        elif top and right: canvas.config(cursor='top_right_corner')
+        elif bottom and left: canvas.config(cursor='bottom_left_corner')
+        elif bottom and right: canvas.config(cursor='bottom_right_corner')
+        elif left or right: canvas.config(cursor='sb_h_double_arrow')
+        elif top or bottom: canvas.config(cursor='sb_v_double_arrow')
+        else: canvas.config(cursor='fleur')
+
     def on_overlay_down(self, event, win, area_ref):
         win.start_x = event.x_root
         win.start_y = event.y_root
@@ -704,11 +731,23 @@ class KarooFish(ctk.CTk):
             area_ref['x'] = nx
             area_ref['y'] = ny
         elif win.resizing:
-            nw, nh = win.win_w, win.win_h
+            nx, ny, nw, nh = win.win_x, win.win_y, win.win_w, win.win_h
             if win.resize_edge['right']: nw += dx
             if win.resize_edge['bottom']: nh += dy
+            if win.resize_edge['left']: 
+                nx += dx
+                nw -= dx
+            if win.resize_edge['top']: 
+                ny += dy
+                nh -= dy
+            
             nw, nh = max(50, nw), max(50, nh)
-            win.geometry(f"{nw}x{nh}")
+            # Update geometry with both size and pos (needed for left/top resize)
+            win.geometry(f"{nw}x{nh}+{nx}+{ny}")
+            
+            # Update config ref
+            area_ref['x'] = nx
+            area_ref['y'] = ny
             area_ref['width'] = nw
             area_ref['height'] = nh
 
@@ -738,11 +777,16 @@ class KarooFish(ctk.CTk):
 
     def click(self, pt, debug_name="Target", hold_time=0.25):
         if not pt: return
-        self.move_to(pt)
-        time.sleep(0.05 if self.use_rdp_mode_var.get() else 0.02)
-        win32api.mouse_event(win32con.MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0)
-        time.sleep(max(hold_time, self.rdp_click_hold))
-        win32api.mouse_event(win32con.MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
+        try:
+            x, y = int(pt[0]), int(pt[1])
+            # Direct Win32 API Click (Restored from .bak)
+            win32api.SetCursorPos((x, y))
+            time.sleep(0.02)
+            win32api.mouse_event(win32con.MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0)
+            time.sleep(max(hold_time, self.rdp_click_hold)) 
+            win32api.mouse_event(win32con.MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
+            time.sleep(0.02)
+        except Exception as e: print(f"Click Error: {e}")
 
     # Actions
     def cast(self):
