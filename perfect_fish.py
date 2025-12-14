@@ -67,7 +67,35 @@ class OCRManager:
             except: pass
 
     def scan_for_spawn(self):
-        # ... existing spawn logic ...
+        if not self.reader or time.time() - self.last_scan < 5.0: return
+        self.last_scan = time.time()
+        
+        try:
+            # Capture Top Center Notification Area
+            w, h = win32api.GetSystemMetrics(0), win32api.GetSystemMetrics(1)
+            # Area: Top 20% of screen, centered width
+            monitor = {"top": 0, "left": int(w * 0.3), "width": int(w * 0.4), "height": int(h * 0.2)}
+            
+            with mss.mss() as sct:
+                img = np.array(sct.grab(monitor))
+                
+            # Read Text
+            results = self.reader.readtext(img, detail=0)
+            text = " ".join(results).lower()
+            
+            if "spawned" in text:
+                # Extract Fruit Name
+                words = text.split()
+                fruit_name = "Unknown Fruit"
+                for i, word in enumerate(words):
+                    if "spawned" in word:
+                        if i > 0: fruit_name = words[i-1]
+                        if i > 2: fruit_name = f"{words[i-3]} {words[i-2]} {words[i-1]}" 
+                        break
+                
+                self.app.webhook_manager.send_fruit_spawn(fruit_name.title())
+                
+        except Exception as e: print(f"OCR Error: {e}")
 
     def scan_for_catch(self):
         if not self.reader: return False
