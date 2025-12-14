@@ -642,7 +642,8 @@ class KarooFish(ctk.CTk):
                         self.overlay_window = self.create_overlay_window(self.overlay_area, "Fishing Zone", THEME_ACCENT)
                         self.ocr_overlay_window = self.create_overlay_window(self.ocr_overlay_area, "OCR Zone", THEME_ACCENT)
                         
-                        if self.fishing_active: self.set_overlay_click_through(True)        else:
+                        if self.fishing_active: self.set_overlay_click_through(True)
+            else: self.set_overlay_click_through(False)
             self.overlay_status.configure(text="Overlay: OFF", text_color="gray")
             self.destroy_overlay()
 
