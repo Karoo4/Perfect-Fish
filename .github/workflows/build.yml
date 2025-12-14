@@ -18,16 +18,18 @@ jobs:
       uses: actions/setup-python@v5
       with:
         python-version: '3.11'
+        cache: 'pip' # Built-in caching for pip
 
     - name: Install PyTorch (CPU)
       # Install PyTorch FIRST from its specific index
       run: pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
 
     - name: Install Dependencies
-      # Install standard packages from default PyPI
+      # Install standard packages
       run: pip install pyinstaller pyinstaller-hooks-contrib keyboard pynput dxcam pywin32 mss Pillow requests numpy comtypes customtkinter easyocr
 
     - name: Build Executable
+      # --upx-dir is optional if you want smaller size but slower build. Skipping for speed.
       run: |
         pyinstaller --noconfirm --onefile --windowed --clean --name "KarooFish-Perfect" --hidden-import "pynput.keyboard._win32" --hidden-import "pynput.mouse._win32" --hidden-import "win32timezone" --collect-all "dxcam" --collect-all "mss" --collect-all "customtkinter" --collect-all "easyocr" perfect_fish.py
 
