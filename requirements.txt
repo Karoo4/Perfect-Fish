@@ -1,0 +1,13 @@
+pyinstaller
+pyinstaller-hooks-contrib
+keyboard
+pynput
+dxcam
+pywin32
+mss
+Pillow
+requests
+numpy
+comtypes
+customtkinter
+easyocr
