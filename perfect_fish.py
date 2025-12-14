@@ -768,26 +768,15 @@ class KarooFish(ctk.CTk):
     def move_to(self, pt):
         if not pt: return
         x, y = int(pt[0]), int(pt[1])
-        if self.use_rdp_mode_var.get():
-            cw, ch = win32api.GetSystemMetrics(0), win32api.GetSystemMetrics(1)
-            nx, ny = int(x * 65535 / cw), int(y * 65535 / ch)
-            win32api.mouse_event(win32con.MOUSEEVENTF_ABSOLUTE | win32con.MOUSEEVENTF_MOVE, nx, ny, 0, 0)
-        else:
-            win32api.SetCursorPos((x, y))
+        win32api.SetCursorPos((x, y))
 
-    def click(self, pt, debug_name="Target", hold_time=0.25):
-        if not pt: return
-        try:
-            x, y = int(pt[0]), int(pt[1])
-            # Direct Win32 API Click (Restored from .bak)
-            win32api.SetCursorPos((x, y))
-            time.sleep(0.02)
+        def click(self, pt, debug_name="Target", hold_time=0.01):
+            if not pt: return
+            self.move_to(pt)
+            time.sleep(0.01) # Stabilization delay
             win32api.mouse_event(win32con.MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0)
-            time.sleep(max(hold_time, self.rdp_click_hold)) 
+            time.sleep(max(hold_time, 0.01))
             win32api.mouse_event(win32con.MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
-            time.sleep(0.02)
-        except Exception as e: print(f"Click Error: {e}")
-
     # Actions
     def cast(self):
         if self.is_performing_action: return
