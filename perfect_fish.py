@@ -259,6 +259,7 @@ class KarooFish(ctk.CTk):
         self.webhook_url_var = ctk.StringVar(value="")
         self.auto_zoom_var = ctk.BooleanVar(value=True)
         self.use_rdp_mode_var = ctk.BooleanVar(value=False)
+        self.rod_key_var = ctk.StringVar(value="1")
 
         self.dpi_scale = self.get_dpi_scale()
         # Default areas
