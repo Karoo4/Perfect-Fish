@@ -1,0 +1,37 @@
+name: Build Windows Executable
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  pull_request:
+    branches: [ "main", "master" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+        cache: 'pip' # Now works because requirements.txt exists
+
+    - name: Install PyTorch (CPU)
+      run: pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+
+    - name: Install Dependencies
+      run: pip install -r requirements.txt
+
+    - name: Build Executable
+      run: |
+        pyinstaller --noconfirm --onefile --windowed --clean --name "KarooFish-Perfect" --hidden-import "pynput.keyboard._win32" --hidden-import "pynput.mouse._win32" --hidden-import "win32timezone" --hidden-import "pystray._win32" --collect-all "dxcam" --collect-all "mss" --collect-all "customtkinter" --collect-all "easyocr" --collect-all "pystray" perfect_fish.py
+
+    - name: Upload Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: KarooFish-Perfect-Windows
+        path: dist/KarooFish-Perfect.exe

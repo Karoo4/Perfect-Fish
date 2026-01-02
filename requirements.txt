@@ -11,3 +11,4 @@ numpy
 comtypes
 customtkinter
 easyocr
+pystray
