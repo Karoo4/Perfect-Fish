@@ -28,7 +28,7 @@ jobs:
 
     - name: Build Executable
       run: |
-        pyinstaller --noconfirm --onefile --windowed --clean --name "KarooFish-Perfect" --hidden-import "pynput.keyboard._win32" --hidden-import "pynput.mouse._win32" --hidden-import "win32timezone" --hidden-import "pystray._win32" --collect-all "dxcam" --collect-all "mss" --collect-all "customtkinter" --collect-all "easyocr" --collect-all "pystray" perfect_fish.py
+        pyinstaller --noconfirm --onefile --windowed --clean --name "KarooFish-Perfect" --hidden-import "pynput.keyboard._win32" --hidden-import "pynput.mouse._win32" --hidden-import "win32timezone" --hidden-import "pystray._win32" --collect-all "dxcam" --collect-all "mss" --collect-all "customtkinter" --collect-all "easyocr" --collect-all "pystray" --collect-all "pyautogui" perfect_fish.py
 
     - name: Upload Artifact
       uses: actions/upload-artifact@v4

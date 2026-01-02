@@ -7,6 +7,7 @@ from pynput import keyboard as pynput_keyboard
 from pynput import mouse as pynput_mouse
 import sys
 import ctypes
+from ctypes import windll
 import dxcam
 import win32api
 import win32con
@@ -22,6 +23,10 @@ import tempfile
 import gc
 from datetime import datetime
 import numpy as np
+import pyautogui
+
+# Disable pyautogui's built-in delay for RDP responsiveness
+pyautogui.PAUSE = 0
 
 # System tray support
 try:
@@ -615,8 +620,8 @@ class KarooFish(ctk.CTk):
         self.brightness_low_var = ctk.IntVar(value=40)
         self.brightness_high_var = ctk.IntVar(value=210)
 
-        # NEW: Color tolerance for detection
-        self.color_tolerance_var = ctk.IntVar(value=25)
+        # Color tolerance for detection (0 = exact match like working version, increase for RDP/compression)
+        self.color_tolerance_var = ctk.IntVar(value=0)
 
         self.dpi_scale = self.get_dpi_scale()
         w, h = win32api.GetSystemMetrics(0), win32api.GetSystemMetrics(1)
@@ -804,7 +809,7 @@ class KarooFish(ctk.CTk):
             self.saturation_threshold_var.set(data.get("saturation_threshold", 20))
             self.brightness_low_var.set(data.get("brightness_low", 40))
             self.brightness_high_var.set(data.get("brightness_high", 210))
-            self.color_tolerance_var.set(data.get("color_tolerance", 25))
+            self.color_tolerance_var.set(data.get("color_tolerance", 0))
         except:
             pass
 
@@ -1010,7 +1015,7 @@ class KarooFish(ctk.CTk):
         self.create_input(settings_content, "Kp:", self.kp_var)
         self.create_input(settings_content, "Kd:", self.kd_var)
         self.create_input(settings_content, "Base Timeout:", self.timeout_var)
-        self.create_input(settings_content, "Color Tolerance:", self.color_tolerance_var)
+        self.create_input(settings_content, "Color Tolerance (0=exact):", self.color_tolerance_var)
 
         # Auto Purchase Section
         purchase_section = CollapsibleSection(frame, "Auto Purchase")
@@ -1179,7 +1184,7 @@ class KarooFish(ctk.CTk):
         else:
             self.fishing_status_lbl.configure(text="Fishing: OFF", text_color="red")
             self.is_clicking = False
-            win32api.mouse_event(win32con.MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
+            pyautogui.mouseUp()
             if self.overlay_window:
                 self.set_overlay_click_through(False)
 
@@ -1326,43 +1331,76 @@ class KarooFish(ctk.CTk):
         self.quit()
         sys.exit()
 
-    # --- MOUSE/INPUT METHODS ---
+    # --- MOUSE/INPUT METHODS (RDP-friendly using pyautogui) ---
     def move_to(self, pt):
         if not pt:
             return
         x, y = int(pt[0]), int(pt[1])
-        win32api.SetCursorPos((x, y))
+        # Use ctypes for cursor positioning (works better over RDP)
+        windll.user32.SetCursorPos(x, y)
 
     def click(self, pt, debug_name="Target", hold_time=0.01):
         if not pt:
             return
-        self.move_to(pt)
-        time.sleep(0.01)
+        x, y = int(pt[0]), int(pt[1])
+
+        # Move cursor using ctypes
+        windll.user32.SetCursorPos(x, y)
+        time.sleep(0.05)
+
+        # Anti-Roblox detection: small relative mouse movement
+        windll.user32.mouse_event(0x0001, 0, 1, 0, 0)
+        time.sleep(0.05)
+
         action_start = time.time()
-        win32api.mouse_event(win32con.MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0)
+
+        # Use pyautogui for the actual click (more RDP-friendly)
+        pyautogui.mouseDown()
         time.sleep(max(hold_time, 0.01))
-        win32api.mouse_event(win32con.MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
+        pyautogui.mouseUp()
+
         # Record response for adaptive delay
         self.adaptive_delay.record_response(action_start, time.time())
 
     def cast(self):
         if self.is_performing_action:
             return
-        hold_time = 1.9 if not self.use_rdp_mode_var.get() else 1.9 * self.adaptive_delay.latency_multiplier
-        self.click(self.point_coords[4], "Cast", hold_time=hold_time)
+
+        pt = self.point_coords[4]
+        if not pt:
+            return
+
+        # Move to cast point
+        x, y = int(pt[0]), int(pt[1])
+        windll.user32.SetCursorPos(x, y)
+        time.sleep(0.05)
+        windll.user32.mouse_event(0x0001, 0, 1, 0, 0)  # Anti-detection
+        time.sleep(0.05)
+
+        # Hold click for casting
+        hold_time = 1.9 if not self.use_rdp_mode_var.get() else 2.5
+        pyautogui.mouseDown()
+        time.sleep(hold_time)
+        pyautogui.mouseUp()
+
         self.session_loops += 1
         self.last_cast_time = time.time()
-        wait_time = 2.5 if not self.use_rdp_mode_var.get() else 2.5 * self.adaptive_delay.latency_multiplier
+
+        # Wait for cast animation
+        wait_time = 2.5 if not self.use_rdp_mode_var.get() else 3.5
         time.sleep(wait_time)
 
     def perform_bait_select(self):
         self.bait_manager.select_top_bait()
 
     def perform_store_fruit(self, force_store=False):
+        """Store devil fruit sequence - RDP-friendly version"""
         try:
             is_rdp = self.use_rdp_mode_var.get()
-            hold_key = self.adaptive_delay.get_key_hold()
-            wait_step = self.adaptive_delay.get_step_delay()
+            hotkey_delay = 1.0 if is_rdp else 0.5
+            click_delay = 2.0 if is_rdp else 1.0
+            shift_delay = 0.5 if is_rdp else 0.3
+            backspace_delay = 1.5 if is_rdp else 0.8
 
             if not force_store:
                 p7 = self.point_coords.get(7)
@@ -1380,15 +1418,12 @@ class KarooFish(ctk.CTk):
                         is_icon = (saturation < sat_thresh) and ((brightness < bright_low) or (brightness > bright_high))
 
                         if not is_icon:
-                            time.sleep(wait_step)
-                            keyboard.press('1')
-                            time.sleep(hold_key)
-                            keyboard.release('1')
-                            time.sleep(self.adaptive_delay.get_wait_for_ui())
-                            keyboard.press(self.rod_key_var.get())
-                            time.sleep(hold_key)
-                            keyboard.release(self.rod_key_var.get())
-                            time.sleep(self.adaptive_delay.get_animation_wait())
+                            # No fruit detected - just re-equip rod
+                            time.sleep(hotkey_delay)
+                            keyboard.press_and_release('1')
+                            time.sleep(hotkey_delay)
+                            keyboard.press_and_release(self.rod_key_var.get())
+                            time.sleep(hotkey_delay)
                             return
 
             # STORE SEQUENCE (Fruit Confirmed)
@@ -1397,48 +1432,70 @@ class KarooFish(ctk.CTk):
             self.is_performing_action = True
 
             rod_key = self.rod_key_var.get()
+            devil_fruit_key = '3'
 
-            # UNEQUIP ROD
-            keyboard.press(rod_key)
-            time.sleep(hold_key)
-            keyboard.release(rod_key)
-            time.sleep(wait_step)
+            print("=== Auto Store Devil Fruit: Starting ===")
 
-            # EQUIP FRUIT (3)
-            keyboard.press('3')
-            time.sleep(hold_key)
-            keyboard.release('3')
-            time.sleep(wait_step)
+            # 1) Press devil fruit hotkey to select it
+            keyboard.press_and_release(devil_fruit_key)
+            print(f"  Pressed Devil Fruit Hotkey: {devil_fruit_key}")
+            time.sleep(hotkey_delay)
 
-            # STORE CLICK
+            if not self.fishing_active:
+                return
+
+            # 2) Click store fruit point
             if self.point_coords.get(5):
-                click_hold = self.adaptive_delay.get_click_hold()
-                for i in range(3):
-                    self.click(self.point_coords[5], f"Store", hold_time=click_hold)
-                    time.sleep(wait_step * 0.5)
-            time.sleep(wait_step)
+                pt5 = self.point_coords[5]
+                windll.user32.SetCursorPos(int(pt5[0]), int(pt5[1]))
+                time.sleep(0.05)
+                windll.user32.mouse_event(0x0001, 0, 1, 0, 0)
+                time.sleep(0.05)
+                pyautogui.mouseDown()
+                pyautogui.mouseUp()
+                print(f"  Clicked Store Fruit Point: ({pt5[0]}, {pt5[1]})")
+                time.sleep(click_delay)
 
-            # DROP / BACKSPACE
-            keyboard.press('backspace')
-            time.sleep(hold_key)
-            keyboard.release('backspace')
+            if not self.fishing_active:
+                return
 
-            # Wait for drop animation
-            time.sleep(self.adaptive_delay.get_animation_wait() * 2)
+            # 3) Press shift
+            keyboard.press_and_release('shift')
+            print("  Pressed Shift")
+            time.sleep(shift_delay)
 
-            # RE-EQUIP ROD
-            keyboard.press('1')
-            time.sleep(hold_key)
-            keyboard.release('1')
-            time.sleep(self.adaptive_delay.get_wait_for_ui())
-            keyboard.press(rod_key)
-            time.sleep(hold_key)
-            keyboard.release(rod_key)
-            time.sleep(self.adaptive_delay.get_animation_wait())
+            if not self.fishing_active:
+                return
 
-            self.move_to(self.point_coords[4])
+            # 4) Press backspace
+            keyboard.press_and_release('backspace')
+            print("  Pressed Backspace")
+            time.sleep(backspace_delay)
+
+            if not self.fishing_active:
+                return
+
+            # 5) Press shift again
+            keyboard.press_and_release('shift')
+            print("  Pressed Shift")
+            time.sleep(shift_delay)
+
+            # 6) Re-equip rod
+            keyboard.press_and_release('1')
+            time.sleep(hotkey_delay)
+            keyboard.press_and_release(rod_key)
+            time.sleep(hotkey_delay)
+
+            # Move back to water point
+            if self.point_coords.get(4):
+                pt4 = self.point_coords[4]
+                windll.user32.SetCursorPos(int(pt4[0]), int(pt4[1]))
             time.sleep(0.2)
-        except:
+
+            print("=== Auto Store Devil Fruit: Complete ===")
+
+        except Exception as e:
+            print(f"Store fruit error: {e}")
             self.is_performing_action = False
         finally:
             self.is_performing_action = False
@@ -1449,53 +1506,115 @@ class KarooFish(ctk.CTk):
         return (img[0, 0, 0], img[0, 0, 1], img[0, 0, 2])
 
     def perform_auto_purchase_sequence(self):
+        """Auto purchase bait sequence - RDP-friendly version matching GPOfishmacro8"""
         try:
             self.is_performing_action = True
+
+            # Check required points (1=left/confirm, 2=middle/input, 3=right/buy, 4=water)
             if not all([self.point_coords[1], self.point_coords[2], self.point_coords[3], self.point_coords[4]]):
+                print("Auto-purchase: Missing required points!")
                 return
+
             self.webhook_manager.send_purchase(str(self.amount_var.get()))
 
-            delay_e = self.adaptive_delay.get_wait_for_ui() * 2
-            hold = self.adaptive_delay.get_click_hold()
-            step = self.adaptive_delay.get_step_delay()
+            # RDP-friendly delays (matching working version)
+            is_rdp = self.use_rdp_mode_var.get()
+            e_delay = 3.0 if is_rdp else 1.5
+            click_delay = 3.0 if is_rdp else 1.0
+            type_delay = 3.0 if is_rdp else 1.0
+            anti_detect_delay = 0.05
 
-            keyboard.press('e')
-            time.sleep(0.1)
-            keyboard.release('e')
-            time.sleep(delay_e)
-            self.click(self.point_coords[1], "Pt 1", hold_time=hold)
-            time.sleep(step)
-            self.click(self.point_coords[2], "Pt 2", hold_time=hold)
-            time.sleep(step)
+            # 1) Press 'e' to open shop
+            keyboard.press_and_release('e')
+            print("  Auto-purchase: Pressed 'e'")
+            time.sleep(e_delay)
 
-            key_delay = 0.1 if self.use_rdp_mode_var.get() else 0.05
-            for char in str(self.amount_var.get()):
-                keyboard.write(char)
-                time.sleep(key_delay)
-            time.sleep(self.adaptive_delay.get_wait_for_ui())
+            if not self.fishing_active:
+                return
 
-            self.click(self.point_coords[1], "Pt 1", hold_time=hold)
-            time.sleep(step * 1.5)
+            # 2) Click left point (first item/confirm)
+            pt1 = self.point_coords[1]
+            windll.user32.SetCursorPos(int(pt1[0]), int(pt1[1]))
+            time.sleep(anti_detect_delay)
+            windll.user32.mouse_event(0x0001, 0, 1, 0, 0)
+            time.sleep(anti_detect_delay)
+            pyautogui.mouseDown()
+            pyautogui.mouseUp()
+            print(f"  Auto-purchase: Clicked Pt1 ({pt1[0]}, {pt1[1]})")
+            time.sleep(click_delay)
 
-            # Safety Loop
-            sct = mss.mss()
-            target_bgr = self.get_pixel_color_at_pt(sct, self.point_coords[3])
-            safety_strikes = 0
-            while safety_strikes < 10:
-                self.click(self.point_coords[3], "Pt 3", hold_time=0.2)
-                time.sleep(step * 0.5)
-                self.click(self.point_coords[2], "Pt 2", hold_time=0.2)
-                time.sleep(step * 0.5)
-                current_bgr = self.get_pixel_color_at_pt(sct, self.point_coords[3])
-                if sum(abs(c - t) for c, t in zip(current_bgr, target_bgr)) > 50:
-                    break
-                else:
-                    safety_strikes += 1
+            if not self.fishing_active:
+                return
 
-            self.move_to(self.point_coords[4])
-            time.sleep(self.adaptive_delay.get_wait_for_ui())
-        except:
-            pass
+            # 3) Click middle point (amount input)
+            pt2 = self.point_coords[2]
+            windll.user32.SetCursorPos(int(pt2[0]), int(pt2[1]))
+            time.sleep(anti_detect_delay)
+            windll.user32.mouse_event(0x0001, 0, 1, 0, 0)
+            time.sleep(anti_detect_delay)
+            pyautogui.mouseDown()
+            pyautogui.mouseUp()
+            print(f"  Auto-purchase: Clicked Pt2 ({pt2[0]}, {pt2[1]})")
+            time.sleep(click_delay)
+
+            if not self.fishing_active:
+                return
+
+            # 4) Type the amount
+            amount_str = str(self.amount_var.get())
+            keyboard.write(amount_str)
+            print(f"  Auto-purchase: Typed amount: {amount_str}")
+            time.sleep(type_delay)
+
+            if not self.fishing_active:
+                return
+
+            # 5) Click left point again (confirm amount)
+            windll.user32.SetCursorPos(int(pt1[0]), int(pt1[1]))
+            time.sleep(anti_detect_delay)
+            windll.user32.mouse_event(0x0001, 0, 1, 0, 0)
+            time.sleep(anti_detect_delay)
+            pyautogui.mouseDown()
+            pyautogui.mouseUp()
+            print(f"  Auto-purchase: Clicked Pt1 again")
+            time.sleep(click_delay)
+
+            if not self.fishing_active:
+                return
+
+            # 6) Click right point (buy button)
+            pt3 = self.point_coords[3]
+            windll.user32.SetCursorPos(int(pt3[0]), int(pt3[1]))
+            time.sleep(anti_detect_delay)
+            windll.user32.mouse_event(0x0001, 0, 1, 0, 0)
+            time.sleep(anti_detect_delay)
+            pyautogui.mouseDown()
+            pyautogui.mouseUp()
+            print(f"  Auto-purchase: Clicked Pt3 ({pt3[0]}, {pt3[1]})")
+            time.sleep(click_delay)
+
+            if not self.fishing_active:
+                return
+
+            # 7) Click middle point (close/confirm)
+            windll.user32.SetCursorPos(int(pt2[0]), int(pt2[1]))
+            time.sleep(anti_detect_delay)
+            windll.user32.mouse_event(0x0001, 0, 1, 0, 0)
+            time.sleep(anti_detect_delay)
+            pyautogui.mouseDown()
+            pyautogui.mouseUp()
+            print(f"  Auto-purchase: Clicked Pt2 (close)")
+            time.sleep(click_delay)
+
+            # Move back to water point
+            pt4 = self.point_coords[4]
+            windll.user32.SetCursorPos(int(pt4[0]), int(pt4[1]))
+            time.sleep(0.2)
+
+            print("  Auto-purchase: Complete!")
+
+        except Exception as e:
+            print(f"Auto-purchase error: {e}")
         finally:
             self.is_performing_action = False
 
@@ -1586,7 +1705,7 @@ class KarooFish(ctk.CTk):
                 timeout_multiplier = self.adaptive_delay.latency_multiplier if self.use_rdp_mode_var.get() else 1.0
                 if time.time() - self.last_cast_time > (self.timeout_var.get() * 1.3 + 10.0) * timeout_multiplier:
                     self.is_clicking = False
-                    win32api.mouse_event(win32con.MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
+                    pyautogui.mouseUp()
                     self.perform_bait_select()
                     self.cast()
                     last_dark_gray_y = None
@@ -1665,7 +1784,7 @@ class KarooFish(ctk.CTk):
                     if was_detecting:
                         was_detecting = False
                         self.is_clicking = False
-                        win32api.mouse_event(win32con.MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
+                        pyautogui.mouseUp()
                         self.recent_catches.append(True)
                         if len(self.recent_catches) > 10:
                             self.recent_catches.pop(0)
@@ -1829,11 +1948,11 @@ class KarooFish(ctk.CTk):
                 if time.time() - self.last_cast_time > cast_delay:
                     if pd_output > 0:
                         if not self.is_clicking:
-                            win32api.mouse_event(win32con.MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0)
+                            pyautogui.mouseDown()
                             self.is_clicking = True
                     else:
                         if self.is_clicking:
-                            win32api.mouse_event(win32con.MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
+                            pyautogui.mouseUp()
                             self.is_clicking = False
 
                 time.sleep(0.01)

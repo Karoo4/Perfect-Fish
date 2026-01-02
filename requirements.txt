@@ -12,3 +12,4 @@ comtypes
 customtkinter
 easyocr
 pystray
+pyautogui
