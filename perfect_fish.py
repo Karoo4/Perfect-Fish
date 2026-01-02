@@ -1511,47 +1511,22 @@ class KarooFish(ctk.CTk):
             time.sleep(0.05)
         time.sleep(0.5)
 
-    # --- VECTORIZED COLOR DETECTION ---
-    def detect_color_vectorized(self, img, target_color, tolerance):
-        """
-        Tolerance-based color matching using vectorized operations.
-        Uses np.linalg.norm for Euclidean distance calculation.
-        """
-        # Convert to float for distance calculation
-        img_float = img.astype(np.float32)
-        target_float = target_color.astype(np.float32)
-
-        # Calculate Euclidean distance from target color for each pixel
-        # Shape: (H, W)
-        distances = np.linalg.norm(img_float - target_float, axis=-1)
-
-        # Create mask where distance is within tolerance
-        mask = distances <= tolerance
-
-        return mask
-
-    def calculate_weighted_centroid(self, values, weights=None):
-        """
-        Calculate weighted centroid of indices.
-        If weights provided, uses intensity-weighted calculation.
-        """
-        if len(values) == 0:
-            return 0
-
-        if weights is not None and len(weights) == len(values):
-            # Weighted centroid
-            total_weight = np.sum(weights)
-            if total_weight > 0:
-                return np.sum(values * weights) / total_weight
-
-        # Fallback to simple mean
-        return np.mean(values)
-
+    # --- FISHING LOOP (Based on working GPOfishmacro8 detection logic) ---
     def run_fishing_loop(self):
-        # Target color (BGR format)
-        target_color = np.array([0x55, 0xaa, 0xff], dtype=np.float32)  # BGR
-        dark_color = np.array([0x19, 0x19, 0x19], dtype=np.float32)
-        white_color = np.array([0xff, 0xff, 0xff], dtype=np.float32)
+        """
+        Main fishing loop using proven detection logic from GPOfishmacro8.
+        Colors (RGB format, checked against BGRA image):
+        - Blue bar: (85, 170, 255)
+        - White line: (255, 255, 255)
+        - Dark gray box: (25, 25, 25)
+        """
+        # Target colors in RGB format (matching working version)
+        target_blue = np.array([85, 170, 255])      # Blue bar
+        target_white = np.array([255, 255, 255])    # White line (target)
+        target_dark_gray = np.array([25, 25, 25])   # Dark gray box (player control)
+
+        # Color tolerance for detection
+        tolerance = self.color_tolerance_var.get()
 
         use_mss_engine = self.use_rdp_mode_var.get()
         sct_engine = mss.mss() if use_mss_engine else None
@@ -1559,7 +1534,7 @@ class KarooFish(ctk.CTk):
         if not use_mss_engine:
             if self.camera is None:
                 try:
-                    self.camera = dxcam.create(output_color="BGR")
+                    self.camera = dxcam.create(output_color="BGRA")
                     self.camera.start(target_fps=60, video_mode=True)
                 except:
                     use_mss_engine = True
@@ -1573,7 +1548,6 @@ class KarooFish(ctk.CTk):
         self.cast()
 
         was_detecting = False
-        detection_streak = 0
         frame_counter = 0
         gc_counter = 0
         curr_w, curr_h = win32api.GetSystemMetrics(0), win32api.GetSystemMetrics(1)
@@ -1587,9 +1561,12 @@ class KarooFish(ctk.CTk):
         fps_frame_count = 0
         fps_start_time = time.time()
 
+        # PD control state
+        last_dark_gray_y = None
+        last_scan_time = time.time()
+        gap_tolerance_multiplier = 2.0
+
         while self.fishing_active:
-            img = None
-            img_full = None
             try:
                 if self.is_performing_action:
                     time.sleep(0.1)
@@ -1605,13 +1582,14 @@ class KarooFish(ctk.CTk):
                 # Record frame timing for adaptive delay
                 self.adaptive_delay.record_frame_time()
 
-                # Watchdog
+                # Watchdog timeout
                 timeout_multiplier = self.adaptive_delay.latency_multiplier if self.use_rdp_mode_var.get() else 1.0
                 if time.time() - self.last_cast_time > (self.timeout_var.get() * 1.3 + 10.0) * timeout_multiplier:
                     self.is_clicking = False
                     win32api.mouse_event(win32con.MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
                     self.perform_bait_select()
                     self.cast()
+                    last_dark_gray_y = None
                     continue
 
                 # Metrics Update
@@ -1636,26 +1614,26 @@ class KarooFish(ctk.CTk):
                     fps_frame_count = 0
                     fps_start_time = time.time()
 
-                # Calc Geometry
-                scale_x, scale_y = curr_w / self.base_width, curr_h / self.base_height
-                ox = max(0, min(int(self.overlay_area['x'] * scale_x), curr_w - 1))
-                oy = max(0, min(int(self.overlay_area['y'] * scale_y), curr_h - 1))
-                ow = max(1, min(int(self.overlay_area['width'] * scale_x), curr_w - ox))
-                oh = max(1, min(int(self.overlay_area['height'] * scale_y), curr_h - oy))
+                # Get overlay geometry
+                ox = self.overlay_area['x']
+                oy = self.overlay_area['y']
+                ow = self.overlay_area['width']
+                oh = self.overlay_area['height']
 
-                # Capture
+                # Capture screenshot
                 if use_mss_engine:
                     monitor = {"top": oy, "left": ox, "width": ow, "height": oh}
-                    img = np.array(sct_engine.grab(monitor))[:, :, :3]
+                    img = np.array(sct_engine.grab(monitor))
                 else:
                     img_full = self.camera.get_latest_frame()
                     if img_full is None:
+                        time.sleep(0.01)
                         continue
                     if np.max(img_full) == 0:
                         try:
                             self.camera.stop()
                             del self.camera
-                            self.camera = dxcam.create(output_color="BGR")
+                            self.camera = dxcam.create(output_color="BGRA")
                             self.camera.start(target_fps=60, video_mode=True)
                             continue
                         except:
@@ -1664,28 +1642,26 @@ class KarooFish(ctk.CTk):
                             continue
                     img = img_full[oy:oy + oh, ox:ox + ow]
 
-                # Convert to float once
-                img_float = img.astype(np.float32)
+                # Check for blue bar color (85, 170, 255) - mss/dxcam returns BGRA
+                # img[:,:,2] = Red, img[:,:,1] = Green, img[:,:,0] = Blue
+                if tolerance > 0:
+                    # Tolerance-based matching
+                    blue_diff = np.abs(img[:, :, 2].astype(np.int16) - target_blue[0]) + \
+                                np.abs(img[:, :, 1].astype(np.int16) - target_blue[1]) + \
+                                np.abs(img[:, :, 0].astype(np.int16) - target_blue[2])
+                    blue_mask = blue_diff <= tolerance * 3
+                else:
+                    # Exact matching
+                    blue_mask = (
+                        (img[:, :, 2] == target_blue[0]) &
+                        (img[:, :, 1] == target_blue[1]) &
+                        (img[:, :, 0] == target_blue[2])
+                    )
 
-                # VECTORIZED: Tolerance-based color detection
-                tolerance = float(self.color_tolerance_var.get())
-                color_distances = np.linalg.norm(img_float - target_color, axis=-1)
-                color_mask = color_distances <= tolerance
+                blue_found = np.any(blue_mask)
 
-                # Find columns with any matching pixels
-                col_mask = np.any(color_mask, axis=0)
-                col_indices = np.where(col_mask)[0]
-
-                if len(col_indices) == 0:
-                    detection_streak = 0
-
-                    # Adaptive: Increase skip frames when idle
-                    time_since_detection = time.time() - last_detection_time
-                    if time_since_detection > 2.0:
-                        frames_to_skip = min(3, int(time_since_detection / 2))
-                    else:
-                        frames_to_skip = 0
-
+                if not blue_found:
+                    # No blue bar detected - fish caught or not fishing
                     if was_detecting:
                         was_detecting = False
                         self.is_clicking = False
@@ -1705,76 +1681,160 @@ class KarooFish(ctk.CTk):
                         if self.auto_bait_var.get():
                             self.perform_bait_select()
                         self.cast()
+                        last_dark_gray_y = None
+
+                    # Adaptive: Increase skip frames when idle
+                    time_since_detection = time.time() - last_detection_time
+                    if time_since_detection > 2.0:
+                        frames_to_skip = min(3, int(time_since_detection / 2))
+                    else:
+                        frames_to_skip = 0
 
                     # Idle: Check for Spawns
                     self.ocr_manager.scan_for_spawn()
-
                     time.sleep(0.02)
                     continue
 
-                # Detection found - reset skip frames
+                # Blue bar found - reset skip frames
                 frames_to_skip = 0
                 last_detection_time = time.time()
+                was_detecting = True
 
-                min_c, max_c = col_indices[0], col_indices[-1]
-                bar_img = img_float[:, min_c:max_c + 1]
+                # Find all coordinates where blue exists
+                y_coords, x_coords = np.where(blue_mask)
+                if len(x_coords) == 0:
+                    time.sleep(0.01)
+                    continue
 
-                # VECTORIZED: Tolerance-based detection for dark and white
-                dark_distances = np.linalg.norm(bar_img - dark_color, axis=-1)
-                white_distances = np.linalg.norm(bar_img - white_color, axis=-1)
+                # Get middle X column of the blue bar
+                middle_x = int(np.mean(x_coords))
 
-                dark_mask = dark_distances <= 15  # Tight tolerance for dark
-                white_mask = white_distances <= 15  # Tight tolerance for white
+                # Get the column slice
+                col_slice = img[:, middle_x, :]
 
-                # Find rows with matches
-                dark_row_mask = np.any(dark_mask, axis=1)
-                white_row_mask = np.any(white_mask, axis=1)
+                # Find gray boundary pixels (25, 25, 25) in this column
+                if tolerance > 0:
+                    gray_diff = np.abs(col_slice[:, 2].astype(np.int16) - target_dark_gray[0]) + \
+                                np.abs(col_slice[:, 1].astype(np.int16) - target_dark_gray[1]) + \
+                                np.abs(col_slice[:, 0].astype(np.int16) - target_dark_gray[2])
+                    gray_mask = gray_diff <= tolerance * 3
+                else:
+                    gray_mask = (
+                        (col_slice[:, 2] == target_dark_gray[0]) &
+                        (col_slice[:, 1] == target_dark_gray[1]) &
+                        (col_slice[:, 0] == target_dark_gray[2])
+                    )
 
-                dark_indices = np.where(dark_row_mask)[0]
-                white_indices = np.where(white_row_mask)[0]
+                if not np.any(gray_mask):
+                    time.sleep(0.01)
+                    continue
 
-                if len(white_indices) > 0 and len(dark_indices) > 0:
-                    detection_streak += 1
-                    if detection_streak >= 3:
-                        was_detecting = True
+                gray_y_coords = np.where(gray_mask)[0]
+                top_gray_y = gray_y_coords[0]
+                bottom_gray_y = gray_y_coords[-1]
 
-                        # WEIGHTED CENTROID: Use intensity as weight
-                        # For white pixels, weight by how "white" they are (inverse of distance)
-                        white_weights = np.zeros(len(white_indices))
-                        for i, row_idx in enumerate(white_indices):
-                            row_white_mask = white_mask[row_idx]
-                            if np.any(row_white_mask):
-                                # Weight = inverse of average distance in this row
-                                avg_dist = np.mean(white_distances[row_idx][row_white_mask])
-                                white_weights[i] = 1.0 / (avg_dist + 1.0)
+                # Get the slice between gray boundaries
+                if bottom_gray_y <= top_gray_y:
+                    time.sleep(0.01)
+                    continue
 
-                        dark_weights = np.zeros(len(dark_indices))
-                        for i, row_idx in enumerate(dark_indices):
-                            row_dark_mask = dark_mask[row_idx]
-                            if np.any(row_dark_mask):
-                                avg_dist = np.mean(dark_distances[row_idx][row_dark_mask])
-                                dark_weights[i] = 1.0 / (avg_dist + 1.0)
+                final_slice = col_slice[top_gray_y:bottom_gray_y + 1]
 
-                        # Calculate weighted centroids
-                        white_center = self.calculate_weighted_centroid(white_indices.astype(np.float32), white_weights)
-                        dark_center = self.calculate_weighted_centroid(dark_indices.astype(np.float32), dark_weights)
+                # Find white line (255, 255, 255) in the slice
+                if tolerance > 0:
+                    white_diff = np.abs(final_slice[:, 2].astype(np.int16) - target_white[0]) + \
+                                 np.abs(final_slice[:, 1].astype(np.int16) - target_white[1]) + \
+                                 np.abs(final_slice[:, 0].astype(np.int16) - target_white[2])
+                    white_mask = white_diff <= tolerance * 3
+                else:
+                    white_mask = (
+                        (final_slice[:, 2] == target_white[0]) &
+                        (final_slice[:, 1] == target_white[1]) &
+                        (final_slice[:, 0] == target_white[2])
+                    )
 
-                        raw_error = dark_center - white_center
-                        normalized_error = raw_error / oh
-                        derivative = normalized_error - self.previous_error
-                        self.previous_error = normalized_error
-                        pd_output = (self.kp_var.get() * normalized_error) + (self.kd_var.get() * derivative)
+                if not np.any(white_mask):
+                    time.sleep(0.01)
+                    continue
 
-                        if pd_output > 0:
-                            cast_delay = 3.0 * (self.adaptive_delay.latency_multiplier if self.use_rdp_mode_var.get() else 1.0)
-                            if time.time() - self.last_cast_time > cast_delay:
-                                if not self.is_clicking:
-                                    win32api.mouse_event(win32con.MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0)
-                                    self.is_clicking = True
-                        else:
-                            if self.is_clicking:
-                                win32api.mouse_event(win32con.MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
-                                self.is_clicking = False
+                white_y_coords = np.where(white_mask)[0]
+                white_height = white_y_coords[-1] - white_y_coords[0] + 1
+                middle_white_y = (white_y_coords[0] + white_y_coords[-1]) // 2
+
+                # Find dark gray box (25, 25, 25) in the slice
+                if tolerance > 0:
+                    dark_diff = np.abs(final_slice[:, 2].astype(np.int16) - target_dark_gray[0]) + \
+                                np.abs(final_slice[:, 1].astype(np.int16) - target_dark_gray[1]) + \
+                                np.abs(final_slice[:, 0].astype(np.int16) - target_dark_gray[2])
+                    dark_mask = dark_diff <= tolerance * 3
+                else:
+                    dark_mask = (
+                        (final_slice[:, 2] == target_dark_gray[0]) &
+                        (final_slice[:, 1] == target_dark_gray[1]) &
+                        (final_slice[:, 0] == target_dark_gray[2])
+                    )
+
+                if not np.any(dark_mask):
+                    time.sleep(0.01)
+                    continue
+
+                dark_y_coords = np.where(dark_mask)[0]
+
+                # Group dark gray pixels with gap tolerance
+                gap_tolerance = max(1, int(white_height * gap_tolerance_multiplier))
+                groups = []
+                current_group = [dark_y_coords[0]]
+
+                for i in range(1, len(dark_y_coords)):
+                    if dark_y_coords[i] - dark_y_coords[i - 1] <= gap_tolerance:
+                        current_group.append(dark_y_coords[i])
+                    else:
+                        groups.append(current_group)
+                        current_group = [dark_y_coords[i]]
+                groups.append(current_group)
+
+                # Find biggest group (the player's box)
+                biggest_group = max(groups, key=len)
+                biggest_group_middle = (biggest_group[0] + biggest_group[-1]) // 2
+
+                # Calculate error: positive = white below dark (need to click), negative = white above dark (release)
+                error = middle_white_y - biggest_group_middle
+
+                # Calculate time delta for derivative
+                current_time = time.time()
+                time_delta = current_time - last_scan_time
+                last_scan_time = current_time
+
+                # PD Control
+                kp = self.kp_var.get()
+                kd = self.kd_var.get()
+
+                # Calculate derivative term
+                d_term = 0
+                if last_dark_gray_y is not None and time_delta > 0.001:
+                    dark_gray_velocity = (biggest_group_middle - last_dark_gray_y) / time_delta
+                    d_term = -kd * dark_gray_velocity
+
+                # PD output
+                pd_output = kp * error + d_term
+
+                # Update last position
+                last_dark_gray_y = biggest_group_middle
+
+                # Control logic:
+                # If pd_output > 0: white is below dark gray, need to click (move down)
+                # If pd_output < 0: white is above dark gray, need to release (move up)
+                cast_delay = 3.0 * (self.adaptive_delay.latency_multiplier if self.use_rdp_mode_var.get() else 1.0)
+
+                if time.time() - self.last_cast_time > cast_delay:
+                    if pd_output > 0:
+                        if not self.is_clicking:
+                            win32api.mouse_event(win32con.MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0)
+                            self.is_clicking = True
+                    else:
+                        if self.is_clicking:
+                            win32api.mouse_event(win32con.MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
+                            self.is_clicking = False
 
                 time.sleep(0.01)
 
